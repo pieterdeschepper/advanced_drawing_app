@@ -5,7 +5,7 @@ class ColorSelector {
 		height = 100,
 		hue = 0,
 		saturation = 0.5,
-		lightness = 0.5,
+		value = 1,
 		showFill = true
 	) {
 		this.holderDiv = holderDiv;
@@ -15,16 +15,16 @@ class ColorSelector {
 
 		this.hue = hue;
 		this.saturation = saturation;
-		this.lightness = lightness;
+		this.value = value;
 		this.showFill = showFill;
 
 		// controls saturation and lightness
-		this.slCanvas = document.createElement("canvas");
-		this.slCanvas.width = this.width;
-		this.slCanvas.height = this.height;
+		this.svCanvas = document.createElement("canvas");
+		this.svCanvas.width = this.width;
+		this.svCanvas.height = this.height;
 
-		this.slCtx = this.slCanvas.getContext("2d");
-		this.holderDiv.appendChild(this.slCanvas);
+		this.svCtx = this.svCanvas.getContext("2d");
+		this.holderDiv.appendChild(this.svCanvas);
 
 		this.outputAndHue = document.createElement("div");
 		this.outputAndHue.style.display = "flex";
@@ -50,11 +50,11 @@ class ColorSelector {
 			})
 		);
 
-		this.#generateSLGradient(this.hue, this.slCtx);
+		this.#generateSVGradient(this.hue, this.svCtx);
 		this.#showOutputColor(
 			this.hue,
 			this.saturation,
-			this.lightness,
+			this.value,
 			this.showFill,
 			this.outputCanvas
 		);
@@ -62,13 +62,18 @@ class ColorSelector {
 		this.#addEventListeners();
 	}
 
-   getFill(){
-      if(this.showFill){
-         return `hsl(${this.hue}, ${this.saturation * 100}%, ${this.lightness * 100}%)`;
-      }else{
-         return null;
-      }
-   }
+	getFill() {
+		if (this.showFill) {
+			const [h, s, l] = this.#hsv2hsl(
+				this.hue / 360,
+				this.saturation,
+				this.value
+			);
+			return `hsl(${h * 360}, ${s * 100}%, ${l * 100}%)`;
+		} else {
+			return null;
+		}
+	}
 
 	#addEventListeners() {
 		this.outputCanvas.addEventListener("click", (e) => {
@@ -76,37 +81,33 @@ class ColorSelector {
 			this.#showOutputColor(
 				this.hue,
 				this.saturation,
-				this.lightness,
+				this.value,
 				this.showFill,
 				this.outputCanvas
 			);
 		});
 
-		this.slCanvas.addEventListener("pointerdown", (e) => {
-			const updateSL = (e) => this.#updateSL(e);
-         updateSL(e);
-			this.slCanvas.addEventListener("pointermove", updateSL);
-			this.slCanvas.addEventListener("pointerup", () => {
-				this.slCanvas.removeEventListener("pointermove", updateSL);
+		this.svCanvas.addEventListener("pointerdown", (e) => {
+			const updateSV = (e) => this.#updateSV(e);
+			updateSV(e);
+			this.svCanvas.addEventListener("pointermove", updateSV);
+			this.svCanvas.addEventListener("pointerup", () => {
+				this.svCanvas.removeEventListener("pointermove", updateSV);
 			});
 		});
 	}
 
-	#updateSL(e) {
+	#updateSV(e) {
 		const x = e.offsetX;
 		const y = e.offsetY;
-		this.saturation = x / this.slCanvas.width;
-		const lightnessDecreaseFactor = 1 - (0.5 * x) / this.slCanvas.width;
-		this.lightness =
-			1 -
-			0.5 * (x / this.slCanvas.width) ** 1 -
-			(y / this.slCanvas.height) * lightnessDecreaseFactor;
+		this.saturation = x / this.svCanvas.width;
+		this.value = 1 - y / this.svCanvas.height;
 
-		this.#generateSLGradient(this.hue, this.slCtx);
+		this.#generateSVGradient(this.hue, this.svCtx);
 		this.#showOutputColor(
 			this.hue,
 			this.saturation,
-			this.lightness,
+			this.value,
 			this.showFill,
 			this.outputCanvas
 		);
@@ -114,22 +115,25 @@ class ColorSelector {
 
 	#changeHue(value, save = true) {
 		this.hue = value;
-		this.#generateSLGradient(this.hue, this.slCtx);
+		this.#generateSVGradient(this.hue, this.svCtx);
 		this.#showOutputColor(
 			this.hue,
 			this.saturation,
-			this.lightness,
+			this.value,
 			this.showFill,
 			this.outputCanvas
 		);
 	}
 
-	#showOutputColor(hue, saturation, lightness, showFill, canvas) {
+	#showOutputColor(hue, saturation, value, showFill, canvas) {
 		const ctx = canvas.getContext("2d");
 		if (showFill) {
-			ctx.fillStyle = `hsl(${hue}, ${saturation * 100}%, ${
-				lightness * 100
-			}%)`;
+			const [h, s, l] = this.#hsv2hsl(
+				this.hue / 360,
+				this.saturation,
+				this.value
+			);
+			ctx.fillStyle = `hsl(${h * 360}, ${s * 100}%, ${l * 100}%)`;
 			ctx.fillRect(0, 0, canvas.width, canvas.height);
 		} else {
 			ctx.fillStyle = "white";
@@ -142,33 +146,24 @@ class ColorSelector {
 		}
 	}
 
-	#generateSLGradient(hue, ctx) {
+	#generateSVGradient(hue, ctx) {
 		const { width, height } = ctx.canvas;
 
 		// To-Do speedup this
-      const stepSize = 2;
-		for (let x = 0; x < width; x+=stepSize) {
-			for (let y = 0; y < height; y+=stepSize) {
-				const saturation = (x / width);
-				const lightnessDecreaseFactor = 1 - (0.5 * x) / width;
-				const lightness =
-					1 -
-					0.5 * (x / width) ** 1 -
-					(y / height) * lightnessDecreaseFactor;
-				ctx.fillStyle = `hsl(${hue}, ${saturation * 100}%, ${
-					lightness * 100
-				}%)`;
+		const stepSize = 2;
+		for (let x = 0; x < width; x += stepSize) {
+			for (let y = 0; y < height; y += stepSize) {
+				const saturation = x / width;
+				const value = 1 - y / height;
+				const [h, s, l] = this.#hsv2hsl(this.hue / 360, saturation, value);
+				ctx.fillStyle = `hsl(${h * 360}, ${s * 100}%, ${l * 100}%)`;
 				ctx.fillRect(x, y, stepSize, stepSize);
 			}
 		}
 
 		// Warning, inverting the formula must be done again if we change it
 		const dotX = this.saturation * width;
-		const lightnessDecreaseFactor = 1 - (0.5 * dotX) / width;
-		const dotY =
-			(-(this.lightness - 1 + 0.5 * (dotX / width) ** 1) /
-				lightnessDecreaseFactor) *
-			height;
+		const dotY = (1 - this.value) * height;
 
 		ctx.strokeStyle = "white";
 		ctx.beginPath();
@@ -178,5 +173,11 @@ class ColorSelector {
 		ctx.strokeStyle = "black";
 		ctx.lineWidth = 1;
 		ctx.stroke();
+	}
+
+	#hsv2hsl(h, s, v) {
+		const l = v - (v * s) / 2;
+		const m = Math.min(l, 1 - l);
+		return [h, m ? (v - l) / m : 0, l];
 	}
 }
